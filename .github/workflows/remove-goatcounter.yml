@@ -1,0 +1,55 @@
+name: Remove GoatCounter from legacy pages
+
+on:
+  push:
+    paths:
+      - '.github/workflows/remove-goatcounter.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Remove GoatCounter scripts from HTML
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          changed = []
+          patterns = [
+              re.compile(rb'<script\b[^>]*(?:goatcounter\.com|gc\.zgo\.at/count\.js)[^>]*>.*?</script\s*>', re.I | re.S),
+              re.compile(rb'<script\b[^>]*data-goatcounter[^>]*>.*?</script\s*>', re.I | re.S),
+          ]
+
+          for p in Path('.').rglob('*.html'):
+              data = p.read_bytes()
+              new = data
+              for pattern in patterns:
+                  new = pattern.sub(b'', new)
+              if new != data:
+                  p.write_bytes(new)
+                  changed.append(str(p))
+
+          print('Modified files:')
+          for f in changed:
+              print(f)
+          if not changed:
+              print('(none)')
+          PY
+      - name: Commit cleanup if needed
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add '*.html' ':/**/*.html' 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo 'No GoatCounter reference found.'
+            exit 0
+          fi
+          git commit -m 'Supprimer GoatCounter des anciennes pages'
+          git push
